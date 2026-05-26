@@ -129,8 +129,13 @@ tailwind.config = {
         </div>
         
         <div>
-          <label class="block text-xs font-semibold mb-1 uppercase tracking-wider text-gray-600 dark:text-gray-400">Reflective Statement</label>
-          <textarea id="reflection" placeholder="What value did you gain from this training?" class="w-full border p-2 rounded bg-white h-20"></textarea>
+          <label class="block text-xs font-semibold mb-1 uppercase tracking-wider text-gray-600 dark:text-gray-400">What Was Learnt?</label>
+          <textarea id="learnt" placeholder="Key concepts, takeaways, or technical skills acquired..." class="w-full border p-2 rounded bg-white h-16"></textarea>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold mb-1 uppercase tracking-wider text-gray-600 dark:text-gray-400">How Will This Benefit?</label>
+          <textarea id="benefit" placeholder="How you will apply this to your day-to-day role or business objectives..." class="w-full border p-2 rounded bg-white h-16"></textarea>
         </div>
         
         <div>
@@ -221,7 +226,8 @@ const tags = document.getElementById('tags');
 const availableTags = document.getElementById('availableTags');
 const date = document.getElementById('date');
 const hoursInput = document.getElementById('hoursInput');
-const reflection = document.getElementById('reflection');
+const learnt = document.getElementById('learnt');
+const benefit = document.getElementById('benefit');
 const evidence = document.getElementById('evidence');
 const exportCSV = document.getElementById('exportCSV');
 const exportPDF = document.getElementById('exportPDF');
@@ -436,6 +442,16 @@ function render(){
     recordsInYear.forEach(r => {
       const el = document.createElement('div');
       el.className = 'record-card bg-white dark:bg-slate-800 p-4 rounded shadow border border-transparent dark:border-slate-700 text-slate-800 dark:text-slate-100 transition';
+      
+      // Support viewing legacy reflections or the split reflection content contextually
+      let reflectionHTML = '';
+      if (r.learnt || r.benefit) {
+        if (r.learnt) reflectionHTML += `<p class="text-xs font-bold text-gray-400 mt-2 uppercase tracking-wide">🧠 What Was Learnt:</p><p class="text-sm mb-2 text-gray-600 dark:text-gray-300 bg-slate-50 dark:bg-slate-900/50 p-2 rounded italic whitespace-pre-wrap">"${escapeHTML(r.learnt)}"</p>`;
+        if (r.benefit) reflectionHTML += `<p class="text-xs font-bold text-gray-400 mt-1 uppercase tracking-wide">🚀 How Will This Benefit:</p><p class="text-sm mb-2 text-gray-600 dark:text-gray-300 bg-slate-50 dark:bg-slate-900/50 p-2 rounded italic whitespace-pre-wrap">"${escapeHTML(r.benefit)}"</p>`;
+      } else if (r.reflection) {
+        reflectionHTML += `<p class="text-xs font-bold text-gray-400 mt-2 uppercase tracking-wide">📝 Reflection:</p><p class="text-sm mb-2 text-gray-600 dark:text-gray-300 bg-slate-50 dark:bg-slate-900/50 p-2 rounded italic whitespace-pre-wrap">"${escapeHTML(r.reflection)}"</p>`;
+      }
+
       el.innerHTML = `
         <div class="flex justify-between items-start">
           <div>
@@ -445,7 +461,7 @@ function render(){
           <div class="font-bold text-sm text-primary bg-blue-50 dark:bg-slate-700 px-2.5 py-1 rounded-md border border-blue-100 dark:border-slate-600 font-mono">${escapeHTML(r.hours)}h</div>
         </div>
         <div class="text-xs text-gray-400 my-1.5 font-mono">${escapeHTML(formatDateToUK(r.date))}</div>
-        ${r.reflection ? `<p class="text-sm my-2 text-gray-600 dark:text-gray-300 bg-slate-50 dark:bg-slate-900/50 p-2 rounded italic whitespace-pre-wrap">"${escapeHTML(r.reflection)}"</p>` : ''}
+        ${reflectionHTML}
         <div class="flex flex-wrap gap-1 my-2">${(r.tags||[]).map(t=>`<span class='tag'>${escapeHTML(t)}</span>`).join('')}</div>
         <div class="flex items-center justify-between mt-3 pt-3 border-t border-slate-100 dark:border-slate-700 text-xs">
           <div>
@@ -481,7 +497,14 @@ function startEdit(id) {
   provider.value = r.provider;
   date.value = r.date;
   hoursInput.value = r.hours;
-  reflection.value = r.reflection || '';
+  
+  // Distribute fields accurately on modification load
+  learnt.value = r.learnt || '';
+  benefit.value = r.benefit || '';
+  if (!r.learnt && !r.benefit && r.reflection) {
+    learnt.value = r.reflection; // Legacy tracking fallback matching context
+  }
+
   evidence.value = r.evidence || '';
   tags.value = (r.tags || []).join(', ');
   formTitle.textContent = "Modify Training Entry";
@@ -517,7 +540,8 @@ form.onsubmit = async e => {
     tags: tagsArr,
     date: date.value,
     hours: +hoursInput.value,
-    reflection: reflection.value,
+    learnt: learnt.value,
+    benefit: benefit.value,
     evidence: evidence.value
   };
 
@@ -544,10 +568,10 @@ async function del(id){
 }
 
 exportCSV.onclick=()=>{
-  const headers = ["Date Completed", "Academic Year", "Activity Title", "Provider", "Tags", "Hours Completed", "Reflective Statement", "Evidence Link"];
+  const headers = ["Date Completed", "Academic Year", "Activity Title", "Provider", "Tags", "Hours Completed", "What Was Learnt", "How Will This Benefit", "Evidence Link"];
   const headerLine = headers.map(h => '"' + h + '"').join(',');
   const dataLines = data.map(r => [
-    r.date, getAcademicYear(r.date), r.title, r.provider, (r.tags || []).join('|'), r.hours, r.reflection || '', r.evidence || ''
+    r.date, getAcademicYear(r.date), r.title, r.provider, (r.tags || []).join('|'), r.hours, r.learnt || r.reflection || '', r.benefit || '', r.evidence || ''
   ].map(v => '"' + (String(v || '').replace(/"/g, '""')) + '"').join(',')).join('\n');
   const csv = headerLine + '\n' + dataLines;
   const a=document.createElement('a');
@@ -676,11 +700,16 @@ exportPDF.onclick = () => {
       const providerString = `Provider: ${r.provider || 'N/A'}`;
       const hoursBadgeString = `[ ${r.hours}h ]`;
       
-      const splitReflection = r.reflection ? doc.splitTextToSize(`"${r.reflection}"`, contentWidth - 10) : [];
+      // Calculate layout text splits dynamically for PDF wrapping
+      const splitLearnt = r.learnt ? doc.splitTextToSize(`What Was Learnt: "${r.learnt}"`, contentWidth - 10) : [];
+      const splitBenefit = r.benefit ? doc.splitTextToSize(`How It Benefits: "${r.benefit}"`, contentWidth - 10) : [];
+      const splitLegacy = !r.learnt && !r.benefit && r.reflection ? doc.splitTextToSize(`Reflection: "${r.reflection}"`, contentWidth - 10) : [];
       const splitTags = r.tags && r.tags.length > 0 ? doc.splitTextToSize(`Tags: ${r.tags.join(', ')}`, contentWidth - 10) : [];
 
       let calculatedBlockHeight = 14; 
-      if (splitReflection.length > 0) calculatedBlockHeight += (splitReflection.length * 5) + 3;
+      if (splitLearnt.length > 0) calculatedBlockHeight += (splitLearnt.length * 4.5) + 3;
+      if (splitBenefit.length > 0) calculatedBlockHeight += (splitBenefit.length * 4.5) + 3;
+      if (splitLegacy.length > 0) calculatedBlockHeight += (splitLegacy.length * 4.5) + 3;
       if (splitTags.length > 0) calculatedBlockHeight += (splitTags.length * 5) + 3;
 
       checkPageOverflow(calculatedBlockHeight);
@@ -703,15 +732,40 @@ exportPDF.onclick = () => {
       doc.text(providerString, margin + 2, y);
       y += 5;
 
-      if (splitReflection.length > 0) {
+      // Render Learnt Field
+      if (splitLearnt.length > 0) {
         doc.setFont("helvetica", "italic");
-        doc.setFontSize(9.5);
+        doc.setFontSize(9);
+        doc.setTextColor(71, 85, 105);
+        doc.setDrawColor(37, 99, 235); // Accent vertical bar
+        doc.setLineWidth(0.5);
+        doc.line(margin + 3, y - 2, margin + 3, y + (splitLearnt.length * 4.5) - 4);
+        doc.text(splitLearnt, margin + 6, y);
+        y += (splitLearnt.length * 4.5) + 1;
+      }
+
+      // Render Benefit Field
+      if (splitBenefit.length > 0) {
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(9);
+        doc.setTextColor(71, 85, 105);
+        doc.setDrawColor(16, 185, 129); // Light green accent bar
+        doc.setLineWidth(0.5);
+        doc.line(margin + 3, y - 2, margin + 3, y + (splitBenefit.length * 4.5) - 4);
+        doc.text(splitBenefit, margin + 6, y);
+        y += (splitBenefit.length * 4.5) + 1;
+      }
+
+      // Legacy fallback layout
+      if (splitLegacy.length > 0) {
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(9);
         doc.setTextColor(71, 85, 105);
         doc.setDrawColor(203, 213, 225);
-        doc.setLineWidth(0.75);
-        doc.line(margin + 3, y - 2, margin + 3, y + (splitReflection.length * 5) - 4);
-        doc.text(splitReflection, margin + 6, y);
-        y += (splitReflection.length * 5) + 1;
+        doc.setLineWidth(0.5);
+        doc.line(margin + 3, y - 2, margin + 3, y + (splitLegacy.length * 4.5) - 4);
+        doc.text(splitLegacy, margin + 6, y);
+        y += (splitLegacy.length * 4.5) + 1;
       }
 
       if (splitTags.length > 0) {
@@ -765,8 +819,9 @@ btnImport.onclick = () => {
           provider: String(r[2] || ''),
           tags: r[3] ? String(r[3]).split('|').map(t=>t.trim()) : [],
           hours: +r[4] || 0,
-          reflection: String(r[5] || ''),
-          evidence: String(r[6] || '')
+          learnt: String(r[5] || ''),
+          benefit: String(r[6] || ''),
+          evidence: String(r[7] || '')
         });
         count++;
       });
