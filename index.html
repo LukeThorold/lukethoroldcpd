@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CPD Tracker Pro+ (Cloud Edition)</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+<script>
+tailwind.config = {
+  theme: { extend: { colors: { primary: '#2563eb' }}}
+}
+</script>
+
+<style>
+.record-card:hover { transform: translateY(-2px); }
+.tag { padding:2px 6px; border-radius:6px; background:#e2e8f0; font-size:12px; color: #1e293b; }
+.tag-pill:hover { filter: brightness(0.95); }
+.academic-group { transition: all 0.2s ease-in-out; }
+</style>
+</head>
+
+<body class="bg-slate-100 text-slate-800 transition-colors duration-200">
+
+<div class="max-w-7xl mx-auto p-6">
+
+<header class="flex justify-between mb-6 items-center">
+<h1 class="text-3xl font-bold">CPD Tracker Pro+ <span class="text-xs bg-blue-600 text-white px-2 py-0.5 rounded ml-2 uppercase tracking-wide">Cloud</span></h1>
+<div class="flex gap-2 items-center">
+  <button id="themeToggle" class="border px-3 py-1 rounded bg-white text-slate-800 shadow-sm hover:bg-slate-50">Theme</button>
+  <button id="logoutBtn" class="hidden bg-red-600 hover:bg-red-700 text-white text-sm px-3 py-1 rounded shadow">Sign Out</button>
+</div>
+</header>
+
+<div id="login" class="max-w-md mx-auto bg-white p-6 rounded shadow-md mt-12 card-bg">
+<h2 id="authTitle" class="text-xl font-bold mb-4 text-slate-900 dark:text-white">Sign In to Your Account</h2>
+<form id="authForm" class="space-y-3">
+  <div>
+    <label class="block text-xs font-semibold mb-1 uppercase tracking-wider text-gray-500">Email Address</label>
+    <input id="emailInput" type="email" required class="border p-2.5 w-full rounded bg-white text-slate-800">
+  </div>
+  <div>
+    <label class="block text-xs font-semibold mb-1 uppercase tracking-wider text-gray-500">Password</label>
+    <input id="passwordInput" type="password" required class="border p-2.5 w-full rounded bg-white text-slate-800">
+  </div>
+  <button id="authBtn" type="submit" class="bg-primary text-white px-4 py-2.5 w-full rounded font-medium hover:bg-blue-700 transition shadow">Open Cloud Dashboard</button>
+</form>
+<div class="text-center mt-4">
+  <button id="toggleAuthMode" class="text-xs text-blue-600 font-semibold hover:underline">Need an account? Create one here</button>
+</div>
+</div>
+
+<div id="dashboard" class="hidden">
+
+<h2 id="welcome" class="text-xl mb-6 font-semibold">Active Profile: Connected to Cloud Database</h2>
+
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+  
+  <div class="lg:col-span-5 space-y-6">
+    
+    <div class="grid grid-cols-2 gap-4">
+      <div class="bg-white p-4 rounded shadow card-bg text-slate-800"><p class="text-sm text-gray-500 dark:text-gray-400">Total Hours (All)</p><strong id="hours" class="text-2xl font-bold">0</strong></div>
+      <div class="bg-white p-4 rounded shadow card-bg text-slate-800"><p class="text-sm text-gray-500 dark:text-gray-400">Total Records (All)</p><strong id="count" class="text-2xl font-bold">0</strong></div>
+    </div>
+
+    <div class="bg-white p-5 rounded shadow card-bg text-slate-800">
+      <h3 id="formTitle" class="text-lg font-bold mb-3 text-primary">Log New CPD Activity</h3>
+      <form id="form" class="grid gap-3">
+        <input type="hidden" id="editingId" value="">
+        
+        <div>
+          <label class="block text-xs font-semibold mb-1 uppercase tracking-wider text-gray-600 dark:text-gray-400">Activity Title</label>
+          <input id="title" placeholder="e.g., Advanced JavaScript Seminar" required class="w-full border p-2 rounded bg-white">
+        </div>
+        
+        <div>
+          <label class="block text-xs font-semibold mb-1 uppercase tracking-wider text-gray-600 dark:text-gray-400">Provider / Organization</label>
+          <input id="provider" placeholder="e.g., Udemy, Internal Academy" required class="w-full border p-2 rounded bg-white">
+        </div>
+        
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-xs font-semibold mb-1 uppercase tracking-wider text-gray-600 dark:text-gray-400">Date Completed</label>
+            <input id="date" type="date" required class="w-full border p-2 rounded bg-white">
+          </div>
+          <div>
+            <label for="hoursInput" class="block text-xs font-semibold mb-1 uppercase tracking-wider text-gray-600 dark:text-gray-400">CPD Hours</label>
+            <input id="hoursInput" type="number" step="0.25" min="0.25" placeholder="e.g., 2.5" required class="w-full border p-2 rounded bg-white">
+          </div>
+        </div>
+        
+        <div>
+          <label class="block text-xs font-semibold mb-1 uppercase tracking-wider text-gray-600 dark:text-gray-400">Tags / Categories <span class="text-gray-400 font-normal">(Comma separated)</span></label>
+          <input id="tags" placeholder="e.g., Tech, Leadership, Legal" class="w-full border p-2 rounded bg-white">
+          
+          <div class="mt-2">
+            <span class="block text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Select Existing Tags:</span>
+            <div id="availableTags" class="flex flex-wrap gap-1 max-h-24 overflow-y-auto p-1 bg-slate-50 dark:bg-slate-900/50 rounded border border-dashed border-slate-200 dark:border-slate-700"></div>
+          </div>
+        </div>
+        
+        <div>
+          <label class="block text-xs font-semibold mb-1 uppercase tracking-wider text-gray-600 dark:text-gray-400">Reflective Statement</label>
+          <textarea id="reflection" placeholder="What value did you gain from this training?" class="w-full border p-2 rounded bg-white h-20"></textarea>
+        </div>
+        
+        <div>
+          <label class="block text-xs font-semibold mb-1 uppercase tracking-wider text-gray-600 dark:text-gray-400">Evidence Link <span class="text-gray-400 font-normal">(URL)</span></label>
+          <input id="evidence" type="url" placeholder="e.g., https://domain.com/cert.pdf" class="w-full border p-2 rounded bg-white">
+        </div>
+        
+        <div class="flex gap-2 mt-2">
+          <button id="submitBtn" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium p-2.5 rounded transition">Save Record</button>
+          <button id="cancelEditBtn" type="button" class="hidden bg-gray-500 hover:bg-gray-600 text-white font-medium p-2.5 rounded transition">Cancel</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="space-y-4">
+      <div class="bg-white p-4 rounded shadow card-bg h-64"><canvas id="yearChart"></canvas></div>
+      <div class="bg-white p-4 rounded shadow card-bg h-64"><canvas id="catChart"></canvas></div>
+    </div>
+
+  </div>
+
+  <div class="lg:col-span-7 space-y-4">
+    
+    <div class="bg-white p-4 rounded shadow card-bg flex flex-col md:flex-row gap-3 justify-between items-center">
+      <div class="w-full md:w-1/2">
+        <input id="search" placeholder="Search entries..." class="border p-2 w-full rounded bg-white text-slate-800">
+      </div>
+      <div class="flex gap-2 w-full md:w-auto justify-end items-center flex-wrap">
+        <button id="exportCSV" class="border px-3 py-1.5 bg-white text-slate-800 rounded text-sm font-medium hover:bg-slate-50 shadow-sm">Export CSV</button>
+        <button id="exportPDF" class="border px-3 py-1.5 bg-white text-slate-800 rounded text-sm font-medium hover:bg-slate-50 shadow-sm">Export PDF</button>
+        <div class="border rounded p-1 flex items-center bg-slate-50 dark:bg-slate-700">
+          <input type="file" id="file" class="text-xs max-w-[140px]">
+          <button id="import" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-2 py-1 rounded font-medium">Import</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="list" class="space-y-4"></div>
+
+  </div>
+
+</div>
+</div>
+
+<script>
+// ⚠️ PASTE YOUR COPIED FIREBASE CONFIGURATION OBJECT BELOW HERE:
+const firebaseConfig = {
+  apiKey: "AIzaSyDfoufHEreLlC3hfDqXDOBuEmTGexbLy6M",
+  authDomain: "luke-thorold-cpd.firebaseapp.com",
+  projectId: "luke-thorold-cpd",
+  storageBucket: "luke-thorold-cpd.firebasestorage.app",
+  messagingSenderId: "936714972704",
+  appId: "1:936714972704:web:b5fc876a0927fd63ef1645",
+  measurementId: "G-3L8VL25FQ6"
+};
+// ⚠️ PASTE YOUR COPIED FIREBASE CONFIGURATION OBJECT ABOVE HERE
+
+// Initialize Firebase SDK
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// DOM declarations
+const themeToggle = document.getElementById('themeToggle');
+const logoutBtn = document.getElementById('logoutBtn');
+const login = document.getElementById('login');
+const dashboard = document.getElementById('dashboard');
+const authForm = document.getElementById('authForm');
+const emailInput = document.getElementById('emailInput');
+const passwordInput = document.getElementById('passwordInput');
+const authBtn = document.getElementById('authBtn');
+const authTitle = document.getElementById('authTitle');
+const toggleAuthMode = document.getElementById('toggleAuthMode');
+const welcome = document.getElementById('welcome');
+const hours = document.getElementById('hours');
+const count = document.getElementById('count');
+const search = document.getElementById('search');
+const yearChart = document.getElementById('yearChart');
+const catChart = document.getElementById('catChart');
+const form = document.getElementById('form');
+const formTitle = document.getElementById('formTitle');
+const editingId = document.getElementById('editingId');
+const submitBtn = document.getElementById('submitBtn');
+const cancelEditBtn = document.getElementById('cancelEditBtn');
+const title = document.getElementById('title');
+const provider = document.getElementById('provider');
+const tags = document.getElementById('tags');
+const availableTags = document.getElementById('availableTags');
+const date = document.getElementById('date');
+const hoursInput = document.getElementById('hoursInput');
+const reflection = document.getElementById('reflection');
+const evidence = document.getElementById('evidence');
+const exportCSV = document.getElementById('exportCSV');
+const exportPDF = document.getElementById('exportPDF');
+const file = document.getElementById('file');
+const btnImport = document.getElementById('import');
+const list = document.getElementById('list');
+
+let data = [];
+let t;
+let yChart = null;
+let cChart = null;
+let collapsedStates = {};
+let isSignUpMode = false;
+
+// Authenticated Tracking State Observer
+auth.onAuthStateChanged(user => {
+  if (user) {
+    login.classList.add('hidden');
+    dashboard.classList.remove('hidden');
+    logoutBtn.classList.remove('hidden');
+    welcome.textContent = `Active Profile: ${user.email}`;
+    
+    // Listen directly to Firestore cloud collections context changes in real time
+    db.collection("cpd_records")
+      .where("userId", "==", user.uid)
+      .onSnapshot(snapshot => {
+         data = [];
+         snapshot.forEach(doc => {
+           let r = doc.data();
+           r.id = doc.id; // Assign Firebase's structural record document ID
+           data.push(r);
+         });
+         render();
+      }, error => {
+         console.error("Firestore database cloud structural sync error:", error);
+      });
+  } else {
+    login.classList.remove('hidden');
+    dashboard.classList.add('hidden');
+    logoutBtn.classList.add('hidden');
+  }
+});
+
+// Handle Login / Registration submit clicks
+authForm.onsubmit = async (e) => {
+  e.preventDefault();
+  const email = emailInput.value.trim();
+  const password = passwordInput.value;
+  
+  try {
+    if (isSignUpMode) {
+      await auth.createUserWithEmailAndPassword(email, password);
+      alert("Registration Successful!");
+    } else {
+      await auth.signInWithEmailAndPassword(email, password);
+    }
+  } catch (err) {
+    alert(err.message);
+  }
+};
+
+// Switch auth view layouts
+toggleAuthMode.onclick = () => {
+  isSignUpMode = !isSignUpMode;
+  if (isSignUpMode) {
+    authTitle.textContent = "Create New Cloud Account";
+    authBtn.textContent = "Register & Open Dashboard";
+    toggleAuthMode.textContent = "Already have an account? Sign In here";
+  } else {
+    authTitle.textContent = "Sign In to Your Account";
+    authBtn.textContent = "Open Cloud Dashboard";
+    toggleAuthMode.textContent = "Need an account? Create one here";
+  }
+};
+
+logoutBtn.onclick = () => auth.signOut();
+
+function escapeHTML(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function formatDateToUK(dateStr) {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : dateStr;
+}
+
+function getAcademicYear(dateStr) {
+  if (!dateStr) return 'Unknown Year';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return 'Unknown Year';
+  const year = d.getFullYear();
+  const month = d.getMonth();
+  return month >= 8 ? `${year}/${year + 1}` : `${year - 1}/${year}`;
+}
+
+const norm = s => (s || '').toLowerCase().trim();
+
+function stats(){
+  hours.textContent = data.reduce((a, b) => a + (+b.hours || 0), 0).toFixed(2);
+  count.textContent = data.length;
+}
+
+function updateTagsSelectorPool() {
+  const uniqueTags = new Set();
+  data.forEach(r => {
+    (r.tags || []).forEach(t => { if(t.trim()) uniqueTags.add(t.trim()); });
+  });
+  availableTags.innerHTML = '';
+  if(uniqueTags.size === 0) {
+    availableTags.innerHTML = '<span class="text-xs text-gray-400 italic px-1">No tags saved yet</span>';
+    return;
+  }
+  const currentTagsList = tags.value.split(',').map(t=>t.trim().toLowerCase()).filter(Boolean);
+  uniqueTags.forEach(tagString => {
+    const isAlreadySelected = currentTagsList.includes(tagString.toLowerCase());
+    const pill = document.createElement('button');
+    pill.type = 'button';
+    pill.className = `tag-pill text-xs px-2 py-0.5 rounded-md border font-medium transition-all ${
+      isAlreadySelected ? 'bg-blue-600 text-white border-blue-700 shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+    }`;
+    pill.textContent = tagString;
+    pill.onclick = () => {
+      let currentTokens = tags.value.split(',').map(t => t.trim()).filter(Boolean);
+      const idx = currentTokens.findIndex(t => t.toLowerCase() === tagString.toLowerCase());
+      if (idx > -1) currentTokens.splice(idx, 1); else currentTokens.push(tagString);
+      tags.value = currentTokens.join(', ');
+      updateTagsSelectorPool();
+    };
+    availableTags.appendChild(pill);
+  });
+}
+tags.oninput = updateTagsSelectorPool;
+
+function charts(filteredRecords){
+  const y={}, c={};
+  filteredRecords.forEach(r => {
+    const ay = getAcademicYear(r.date);
+    if (collapsedStates[ay] === false) return;
+    y[ay] = (y[ay] || 0) + +r.hours;
+    (r.tags || []).forEach(tag => { if(tag.trim()) c[tag] = (c[tag] || 0) + 1; });
+  });
+  if(yChart) yChart.destroy();
+  if(cChart) cChart.destroy();
+  yChart = new Chart(yearChart,{type:'bar',data:{labels:Object.keys(y),datasets:[{label:'Hours per Academic Year',data:Object.values(y),backgroundColor:'#2563eb'}]},options:{responsive:true,maintainAspectRatio:false}});
+  cChart = new Chart(catChart,{type:'pie',data:{labels:Object.keys(c),datasets:[{data:Object.values(c),backgroundColor:['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6']}]},options:{responsive:true,maintainAspectRatio:false}});
+}
+
+function render(){
+  const q = norm(search.value);
+  const d = data
+    .filter(r => !q || JSON.stringify(r).toLowerCase().includes(q))
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  list.innerHTML = '';
+  updateTagsSelectorPool();
+
+  if(!d.length){
+    list.innerHTML = '<div class="bg-white p-6 rounded shadow card-bg text-center text-gray-500">No training documents matching search filter.</div>';
+    stats();
+    charts([]);
+    return;
+  }
+
+  const groupedData = {};
+  d.forEach(r => {
+    const ay = getAcademicYear(r.date);
+    if (!groupedData[ay]) groupedData[ay] = [];
+    groupedData[ay].push(r);
+  });
+
+  const sortedYears = Object.keys(groupedData).sort((a, b) => b.localeCompare(a));
+
+  sortedYears.forEach(ay => {
+    const recordsInYear = groupedData[ay];
+    const yearHours = recordsInYear.reduce((sum, r) => sum + (+r.hours || 0), 0).toFixed(2);
+    if (collapsedStates[ay] === undefined) collapsedStates[ay] = true; 
+    const isOpen = collapsedStates[ay];
+
+    const groupEl = document.createElement('div');
+    groupEl.className = 'academic-group bg-slate-200/60 dark:bg-slate-900/40 p-3 rounded-lg border border-slate-300/50 dark:border-slate-700/60';
+    groupEl.innerHTML = `
+      <div class="flex justify-between items-center cursor-pointer select-none pb-2 header-toggle" data-year="${ay}">
+        <div class="flex items-center gap-2">
+          <span class="transform transition-transform duration-150 inline-block text-gray-500 ${isOpen ? 'rotate-90' : ''}">▶</span>
+          <h3 class="text-base font-bold text-slate-800 dark:text-slate-200">Academic Year ${ay}</h3>
+          <span class="text-xs bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-full font-mono">${recordsInYear.length} items</span>
+        </div>
+        <div class="text-sm font-bold text-slate-700 dark:text-slate-300">Subtotal: <span class="text-primary font-mono">${yearHours}h</span></div>
+      </div>
+      <div class="records-container space-y-3 mt-1 ${isOpen ? '' : 'hidden'}"></div>
+    `;
+
+    const recordsContainer = groupEl.querySelector('.records-container');
+    recordsInYear.forEach(r => {
+      const el = document.createElement('div');
+      el.className = 'record-card bg-white dark:bg-slate-800 p-4 rounded shadow border border-transparent dark:border-slate-700 text-slate-800 dark:text-slate-100 transition';
+      el.innerHTML = `
+        <div class="flex justify-between items-start">
+          <div>
+            <strong class="text-base font-bold text-slate-900 dark:text-white">${escapeHTML(r.title)}</strong><br>
+            <span class="text-xs text-gray-500 dark:text-gray-400 font-medium">${escapeHTML(r.provider)}</span>
+          </div>
+          <div class="font-bold text-sm text-primary bg-blue-50 dark:bg-slate-700 px-2.5 py-1 rounded-md border border-blue-100 dark:border-slate-600 font-mono">${escapeHTML(r.hours)}h</div>
+        </div>
+        <div class="text-xs text-gray-400 my-1.5 font-mono">${escapeHTML(formatDateToUK(r.date))}</div>
+        ${r.reflection ? `<p class="text-sm my-2 text-gray-600 dark:text-gray-300 bg-slate-50 dark:bg-slate-900/50 p-2 rounded italic whitespace-pre-wrap">"${escapeHTML(r.reflection)}"</p>` : ''}
+        <div class="flex flex-wrap gap-1 my-2">${(r.tags||[]).map(t=>`<span class='tag'>${escapeHTML(t)}</span>`).join('')}</div>
+        <div class="flex items-center justify-between mt-3 pt-3 border-t border-slate-100 dark:border-slate-700 text-xs">
+          <div>
+            ${r.evidence ? `📎 <a href="${escapeHTML(r.evidence)}" target="_blank" class="text-blue-500 hover:underline font-medium">Evidence Document</a>` : '<span class="text-gray-400">No attached evidence</span>'}
+          </div>
+          <div class="flex gap-3">
+            <button class="text-blue-600 dark:text-blue-400 hover:underline edit-btn font-semibold">Edit</button>
+            <button class="text-red-600 dark:text-red-400 hover:underline delete-btn font-semibold">Delete</button>
+          </div>
+        </div>
+      `;
+      el.querySelector('.edit-btn').onclick = (e) => { e.stopPropagation(); startEdit(r.id); };
+      el.querySelector('.delete-btn').onclick = (e) => { e.stopPropagation(); del(r.id); };
+      recordsContainer.appendChild(el);
+    });
+
+    groupEl.querySelector('.header-toggle').onclick = () => {
+      collapsedStates[ay] = !collapsedStates[ay];
+      render();
+    };
+    list.appendChild(groupEl);
+  });
+
+  stats();
+  charts(d);
+}
+
+function startEdit(id) {
+  const r = data.find(rec => rec.id === id);
+  if (!r) return;
+  editingId.value = r.id;
+  title.value = r.title;
+  provider.value = r.provider;
+  date.value = r.date;
+  hoursInput.value = r.hours;
+  reflection.value = r.reflection || '';
+  evidence.value = r.evidence || '';
+  tags.value = (r.tags || []).join(', ');
+  formTitle.textContent = "Modify Training Entry";
+  submitBtn.textContent = "Update Record";
+  submitBtn.classList.replace('bg-green-600', 'bg-blue-600');
+  cancelEditBtn.classList.remove('hidden');
+  updateTagsSelectorPool();
+  form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function resetForm() {
+  form.reset();
+  editingId.value = "";
+  formTitle.textContent = "Log New CPD Activity";
+  submitBtn.textContent = "Save Record";
+  submitBtn.classList.replace('bg-blue-600', 'bg-green-600');
+  cancelEditBtn.classList.add('hidden');
+  updateTagsSelectorPool();
+}
+cancelEditBtn.onclick = resetForm;
+
+form.onsubmit = async e => {
+  e.preventDefault();
+  const currentUser = auth.currentUser;
+  if (!currentUser) return alert("Session expired. Sign back in.");
+
+  const tagsArr = tags.value.split(',').map(t=>t.trim()).filter(Boolean);
+  const currentId = editingId.value;
+  const recordData = {
+    userId: currentUser.uid,
+    title: title.value,
+    provider: provider.value,
+    tags: tagsArr,
+    date: date.value,
+    hours: +hoursInput.value,
+    reflection: reflection.value,
+    evidence: evidence.value
+  };
+
+  try {
+    if (currentId) {
+      await db.collection("cpd_records").doc(currentId).set(recordData, { merge: true });
+    } else {
+      await db.collection("cpd_records").add(recordData);
+    }
+    resetForm();
+  } catch (err) {
+    alert("Error saving record to database: " + err.message);
+  }
+};
+
+async function del(id){
+  if(!confirm('Are you sure you want to delete this record from cloud storage?')) return;
+  try {
+    await db.collection("cpd_records").doc(id).delete();
+    if(editingId.value === id) resetForm();
+  } catch (err) {
+    alert("Error deleting record: " + err.message);
+  }
+}
+
+exportCSV.onclick=()=>{
+  const headers = ["Date Completed", "Academic Year", "Activity Title", "Provider", "Tags", "Hours Completed", "Reflective Statement", "Evidence Link"];
+  const headerLine = headers.map(h => '"' + h + '"').join(',');
+  const dataLines = data.map(r => [
+    r.date, getAcademicYear(r.date), r.title, r.provider, (r.tags || []).join('|'), r.hours, r.reflection || '', r.evidence || ''
+  ].map(v => '"' + (String(v || '').replace(/"/g, '""')) + '"').join(',')).join('\n');
+  const csv = headerLine + '\n' + dataLines;
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv], {type: 'text/csv;charset=utf-8;'}));
+  a.download='cpd_report.csv';
+  a.click();
+};
+
+exportPDF.onclick=()=>{
+  const { jsPDF } = window.jspdf;
+  const doc=new jsPDF();
+  let y=10;
+  doc.text(`CPD Report (Cloud Live Summary)`,10,y);
+  y+=10;
+  data.sort((a,b)=>new Date(b.date)-new Date(a.date)).forEach(r=>{
+    doc.text(`[AY ${getAcademicYear(r.date)}] ${formatDateToUK(r.date)} - ${r.title} (${r.hours}h)`,10,y);
+    y+=6;
+  });
+  doc.save('cpd-report.pdf');
+};
+
+btnImport.onclick=()=>{
+  const f=file.files[0];
+  const currentUser = auth.currentUser;
+  if(!f || !currentUser) return alert('Select a file and check cloud connection status.');
+  const reader=new FileReader();
+  reader.onload=async e=>{
+    let rows;
+    if(f.name.endsWith('.csv')){
+      const wb = XLSX.read(e.target.result, {type: 'string'});
+      rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
+    } else {
+      const wb=XLSX.read(e.target.result,{type:'array'});
+      rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
+    }
+    
+    // Batch process imports directly into Firebase collections
+    const batch = db.batch();
+    rows.slice(1).forEach(r=>{
+      if(!r[0]) return;
+      const ref = db.collection("cpd_records").doc();
+      batch.set(ref, {
+        userId: currentUser.uid,
+        date: String(r[0] || ''),
+        title: String(r[1] || 'Imported Activity'),
+        provider: String(r[2] || ''),
+        tags: r[3] ? String(r[3]).split('|').map(t=>t.trim()) : [],
+        hours: +r[4]||0,
+        reflection: String(r[5] || ''),
+        evidence: String(r[6] || '')
+      });
+    });
+    await batch.commit();
+    alert('All entries imported securely to the cloud!');
+  };
+  f.name.endsWith('.csv') ? reader.readAsText(f) : reader.readAsArrayBuffer(f);
+};
+
+themeToggle.onclick=()=>{
+  document.documentElement.classList.toggle('dark');
+  document.body.classList.toggle('bg-slate-900');
+  document.body.classList.toggle('text-white');
+  document.body.classList.toggle('bg-slate-100');
+  document.body.classList.toggle('text-slate-800');
+  document.querySelectorAll('.card-bg').forEach(el => {
+     el.classList.toggle('bg-white'); el.classList.toggle('bg-slate-800');
+     el.classList.toggle('text-slate-800'); el.classList.toggle('text-white');
+  });
+};
+search.oninput = () => { clearTimeout(t); t = setTimeout(render, 80); };
+</script>
+</body>
+</html>
