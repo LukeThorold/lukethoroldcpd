@@ -520,17 +520,183 @@ exportCSV.onclick=()=>{
   a.click();
 };
 
-exportPDF.onclick=()=>{
+exportPDF.onclick = () => {
   const { jsPDF } = window.jspdf;
-  const doc=new jsPDF();
-  let y=10;
-  doc.text(`CPD Report (Cloud Live Summary)`,10,y);
-  y+=10;
-  data.sort((a,b)=>new Date(b.date)-new Date(a.date)).forEach(r=>{
-    doc.text(`[AY ${getAcademicYear(r.date)}] ${formatDateToUK(r.date)} - ${r.title} (${r.hours}h)`,10,y);
-    y+=6;
+  const doc = new jsPDF('p', 'mm', 'a4'); // Initialize standard portrait A4 page
+  
+  const currentUser = auth.currentUser;
+  const emailDisplay = currentUser ? currentUser.email : "Cloud Profile";
+  
+  let y = 20;
+  const pageHeight = doc.internal.pageSize.height;
+  const margin = 15;
+  const contentWidth = 180;
+
+  // Helper function to check page boundaries and add a clean next page
+  function checkPageOverflow(neededHeight) {
+    if (y + neededHeight > pageHeight - margin) {
+      doc.addPage();
+      y = 20; // Reset vertical position for new page
+      
+      // Subtle running footer on new pages
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184); // slate-400
+      doc.text("CPD Tracker Live Cloud Export", margin, pageHeight - 10);
+    }
+  }
+
+  // --- REPORT HEADER BLOCK ---
+  // Deep corporate blue primary brand bar
+  doc.setFillColor(37, 99, 235); // Tailwind primary blue (#2563eb)
+  doc.rect(margin, y, contentWidth, 2, 'F');
+  y += 10;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(24);
+  doc.setTextColor(30, 41, 59); // slate-800
+  doc.text("Continuing Professional Development", margin, y);
+  y += 8;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  doc.setTextColor(100, 116, 139); // slate-500
+  doc.text(`Official Record Summary for: ${emailDisplay}`, margin, y);
+  
+  // Right-aligned generation date stamp
+  const dateStamp = new Date().toLocaleDateString('en-GB');
+  doc.text(`Exported: ${dateStamp}`, 195 - doc.getTextWidth(`Exported: ${dateStamp}`), y);
+  y += 6;
+
+  // Subtle clean horizontal divider rule
+  doc.setDrawColor(226, 232, 240); // slate-200
+  doc.setLineWidth(0.5);
+  doc.line(margin, y, margin + contentWidth, y);
+  y += 12;
+
+  // Verify if data exists to generate reports
+  if (!data || data.length === 0) {
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(12);
+    doc.text("No training logs found in this profile history context.", margin, y);
+    doc.save(`cpd-report-${dateStamp}.pdf`);
+    return;
+  }
+
+  // --- PROCESS AND GROUP DATA BY ACADEMIC CYCLES ---
+  const groupedData = {};
+  data.forEach(r => {
+    const ay = getAcademicYear(r.date);
+    if (!groupedData[ay]) groupedData[ay] = [];
+    groupedData[ay].push(r);
   });
-  doc.save('cpd-report.pdf');
+  const sortedYears = Object.keys(groupedData).sort((a, b) => b.localeCompare(a));
+
+  // --- LOOP ACADEMIC GROUPS ---
+  sortedYears.forEach(ay => {
+    const records = groupedData[ay].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const totalHours = records.reduce((sum, r) => sum + (+r.hours || 0), 0).toFixed(2);
+
+    checkPageOverflow(18);
+
+    // Group Section Banner Block Layout
+    doc.setFillColor(241, 245, 249); // slate-100 banner fill
+    doc.rect(margin, y, contentWidth, 10, 'F');
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(30, 41, 59); // slate-800
+    doc.text(`ACADEMIC CYCLE: ${ay}`, margin + 4, y + 6.5);
+
+    const subtotalText = `Subtotal: ${totalHours} Hours`;
+    doc.text(subtotalText, 195 - doc.getTextWidth(subtotalText) - 4, y + 6.5);
+    y += 16;
+
+    // Loop individual records inside this academic cycle block
+    records.forEach(r => {
+      // Calculate how long our text descriptions are to adapt dynamic row wrapping structures safely
+      const formattedDate = formatDateToUK(r.date);
+      const headerString = `${formattedDate}  |  ${r.title}`;
+      const providerString = `Provider: ${r.provider || 'N/A'}`;
+      const hoursBadgeString = `[ ${r.hours}h ]`;
+      
+      // Wrap long text blocks so they wrap into multi-line paragraphs cleanly
+      const splitReflection = r.reflection 
+        ? doc.splitTextToSize(`"${r.reflection}"`, contentWidth - 10) 
+        : [];
+      const splitTags = r.tags && r.tags.length > 0 
+        ? doc.splitTextToSize(`Tags: ${r.tags.join(', ')}`, contentWidth - 10) 
+        : [];
+
+      // Calculate dynamic space needed for this specific log card container block elements
+      let calculatedBlockHeight = 14; 
+      if (splitReflection.length > 0) calculatedBlockHeight += (splitReflection.length * 5) + 3;
+      if (splitTags.length > 0) calculatedBlockHeight += (splitTags.length * 5) + 3;
+
+      checkPageOverflow(calculatedBlockHeight);
+
+      // Render Primary Record Metadata Row Header
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(15, 23, 42); // slate-900
+      
+      // Make sure titles don't overflow into the hour badges on the right side
+      const maxTitleWidth = contentWidth - 30;
+      const clippedHeader = doc.getTextWidth(headerString) > maxTitleWidth 
+        ? headerString.substring(0, 65) + "..." 
+        : headerString;
+      
+      doc.text(clippedHeader, margin + 2, y);
+      
+      // Right-aligned clear numeric hours tag indicator
+      doc.setTextColor(37, 99, 235); // Blue primary brand color emphasis
+      doc.text(hoursBadgeString, 195 - doc.getTextWidth(hoursBadgeString) - 2, y);
+      y += 5.5;
+
+      // Render Provider Row subtext elements
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9.5);
+      doc.setTextColor(100, 116, 139); // slate-500
+      doc.text(providerString, margin + 2, y);
+      y += 5;
+
+      // Render wrapped lines of personal Reflective Statements paragraphs if filled
+      if (splitReflection.length > 0) {
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(9.5);
+        doc.setTextColor(71, 85, 105); // slate-600
+        
+        // Add a subtle vertical quote element indicator bracket on margins
+        doc.setDrawColor(203, 213, 225); // slate-300
+        doc.setLineWidth(0.75);
+        doc.line(margin + 3, y - 2, margin + 3, y + (splitReflection.length * 5) - 4);
+        
+        doc.text(splitReflection, margin + 6, y);
+        y += (splitReflection.length * 5) + 1;
+      }
+
+      // Render Tag list array capsules if defined
+      if (splitTags.length > 0) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8.5);
+        doc.setTextColor(148, 163, 184); // slate-400
+        doc.text(splitTags, margin + 2, y);
+        y += (splitTags.length * 5);
+      }
+
+      // Draw thin structural line separations between entries
+      y += 2;
+      doc.setDrawColor(241, 245, 249); // slate-100 line accents
+      doc.setLineWidth(0.25);
+      doc.line(margin, y, margin + contentWidth, y);
+      y += 8; // Margin separator buffer space before next layout rendering
+    });
+
+    y += 4; // Extra air spacer buffers between separate academic block groupings
+  });
+
+  // Save out down generated file asset with context date string stamps
+  doc.save(`CPD-Report-${dateStamp.replace(/\//g, '-')}.pdf`);
 };
 
 btnImport.onclick = () => {
