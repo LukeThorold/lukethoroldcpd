@@ -533,43 +533,59 @@ exportPDF.onclick=()=>{
   doc.save('cpd-report.pdf');
 };
 
-btnImport.onclick=()=>{
-  const f=file.files[0];
+btnImport.onclick = () => {
+  const f = file.files[0];
   const currentUser = auth.currentUser;
-  if(!f || !currentUser) return alert('Select a file and check cloud connection status.');
-  const reader=new FileReader();
-  reader.onload=async e=>{
-    let rows;
-    if(f.name.endsWith('.csv')){
-      const wb = XLSX.read(e.target.result, {type: 'string'});
-      rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
-    } else {
-      const wb=XLSX.read(e.target.result,{type:'array'});
-      rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
-    }
-    
-    // Batch process imports directly into Firebase collections
-    const batch = db.batch();
-    rows.slice(1).forEach(r=>{
-      if(!r[0]) return;
-      const ref = db.collection("cpd_records").doc();
-      batch.set(ref, {
-        userId: currentUser.uid,
-        date: String(r[0] || ''),
-        title: String(r[1] || 'Imported Activity'),
-        provider: String(r[2] || ''),
-        tags: r[3] ? String(r[3]).split('|').map(t=>t.trim()) : [],
-        hours: +r[4]||0,
-        reflection: String(r[5] || ''),
-        evidence: String(r[6] || '')
+  if (!f || !currentUser) return alert('Select a file and check cloud connection status.');
+  
+  const reader = new FileReader();
+  reader.onload = async e => {
+    try {
+      let rows;
+      if (f.name.endsWith('.csv')) {
+        const wb = XLSX.read(e.target.result, {type: 'string'});
+        rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
+      } else {
+        const wb = XLSX.read(e.target.result, {type:'array'});
+        rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
+      }
+      
+      // Batch process imports directly into Firebase collections
+      const batch = db.batch();
+      let count = 0;
+
+      rows.slice(1).forEach(r => {
+        if (!r[0]) return; // Skip empty rows
+        const ref = db.collection("cpd_records").doc();
+        batch.set(ref, {
+          userId: currentUser.uid,
+          date: String(r[0] || ''),
+          title: String(r[1] || 'Imported Activity'),
+          provider: String(r[2] || ''),
+          tags: r[3] ? String(r[3]).split('|').map(t=>t.trim()) : [],
+          hours: +r[4] || 0,
+          reflection: String(r[5] || ''),
+          evidence: String(r[6] || '')
+        });
+        count++;
       });
-    });
-    await batch.commit();
-    alert('All entries imported securely to the cloud!');
+
+      if (count === 0) {
+        alert("No valid data rows found to import. Check your spreadsheet formatting.");
+        return;
+      }
+
+      await batch.commit();
+      alert(`Success! ${count} entries imported securely to the cloud!`);
+      file.value = ""; // Clear file input
+    } catch (err) {
+      console.error("Detailed Import Error:", err);
+      alert("Import Failed: " + err.message);
+    }
   };
+  
   f.name.endsWith('.csv') ? reader.readAsText(f) : reader.readAsArrayBuffer(f);
 };
-
 themeToggle.onclick=()=>{
   document.documentElement.classList.toggle('dark');
   document.body.classList.toggle('bg-slate-900');
