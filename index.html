@@ -294,7 +294,8 @@ authForm.onsubmit = async (e) => {
       await auth.signInWithEmailAndPassword(email, password);
     }
   } catch (err) {
-    alert(err.message);
+    console.error("Firebase Authentication Error Details:", err);
+    alert("Auth Failed: " + err.message);
   }
 };
 
@@ -555,7 +556,6 @@ exportCSV.onclick=()=>{
   a.click();
 };
 
-// 📄 INTEGRATED ADVANCED PDF METADATA HEADER GENERATOR Engine 
 exportPDF.onclick = () => {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF('p', 'mm', 'a4');
@@ -563,7 +563,6 @@ exportPDF.onclick = () => {
   const currentUser = auth.currentUser;
   const emailDisplay = currentUser ? currentUser.email : "Cloud Profile";
   
-  // Extract reactive metadata elements directly from form inputs
   const nameVal = profileName.value.trim();
   const jobVal = profileJob.value.trim();
   const regVal = profileReg.value.trim();
@@ -584,7 +583,6 @@ exportPDF.onclick = () => {
     }
   }
 
-  // --- REPORT HEADER BLOCK ---
   doc.setFillColor(37, 99, 235);
   doc.rect(margin, y, contentWidth, 2, 'F');
   y += 10;
@@ -595,7 +593,6 @@ exportPDF.onclick = () => {
   doc.text("Continuing Professional Development", margin, y);
   y += 8;
 
-  // Render multi-column metadata grids if profile customization details exist
   if (nameVal || jobVal || regVal) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
@@ -676,4 +673,133 @@ exportPDF.onclick = () => {
     records.forEach(r => {
       const formattedDate = formatDateToUK(r.date);
       const headerString = `${formattedDate}  |  ${r.title}`;
-      const providerString = `Provider: ${r
+      const providerString = `Provider: ${r.provider || 'N/A'}`;
+      const hoursBadgeString = `[ ${r.hours}h ]`;
+      
+      const splitReflection = r.reflection ? doc.splitTextToSize(`"${r.reflection}"`, contentWidth - 10) : [];
+      const splitTags = r.tags && r.tags.length > 0 ? doc.splitTextToSize(`Tags: ${r.tags.join(', ')}`, contentWidth - 10) : [];
+
+      let calculatedBlockHeight = 14; 
+      if (splitReflection.length > 0) calculatedBlockHeight += (splitReflection.length * 5) + 3;
+      if (splitTags.length > 0) calculatedBlockHeight += (splitTags.length * 5) + 3;
+
+      checkPageOverflow(calculatedBlockHeight);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(15, 23, 42);
+      
+      const maxTitleWidth = contentWidth - 30;
+      const clippedHeader = doc.getTextWidth(headerString) > maxTitleWidth ? headerString.substring(0, 65) + "..." : headerString;
+      doc.text(clippedHeader, margin + 2, y);
+      
+      doc.setTextColor(37, 99, 235);
+      doc.text(hoursBadgeString, 195 - doc.getTextWidth(hoursBadgeString) - 2, y);
+      y += 5.5;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text(providerString, margin + 2, y);
+      y += 5;
+
+      if (splitReflection.length > 0) {
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(9.5);
+        doc.setTextColor(71, 85, 105);
+        doc.setDrawColor(203, 213, 225);
+        doc.setLineWidth(0.75);
+        doc.line(margin + 3, y - 2, margin + 3, y + (splitReflection.length * 5) - 4);
+        doc.text(splitReflection, margin + 6, y);
+        y += (splitReflection.length * 5) + 1;
+      }
+
+      if (splitTags.length > 0) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8.5);
+        doc.setTextColor(148, 163, 184);
+        doc.text(splitTags, margin + 2, y);
+        y += (splitTags.length * 5);
+      }
+
+      y += 2;
+      doc.setDrawColor(241, 245, 249);
+      doc.setLineWidth(0.25);
+      doc.line(margin, y, margin + contentWidth, y);
+      y += 8;
+    });
+
+    y += 4;
+  });
+
+  doc.save(`CPD-Report-${dateStamp.replace(/\//g, '-')}.pdf`);
+};
+
+btnImport.onclick = () => {
+  const f = file.files[0];
+  const currentUser = auth.currentUser;
+  if (!f || !currentUser) return alert('Select a file and check cloud connection status.');
+  
+  const reader = new FileReader();
+  reader.onload = async e => {
+    try {
+      let rows;
+      if (f.name.endsWith('.csv')) {
+        const wb = XLSX.read(e.target.result, {type: 'string'});
+        rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
+      } else {
+        const wb = XLSX.read(e.target.result, {type:'array'});
+        rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
+      }
+      
+      const batch = db.batch();
+      let count = 0;
+
+      rows.slice(1).forEach(r => {
+        if (!r[0]) return;
+        const ref = db.collection("cpd_records").doc();
+        batch.set(ref, {
+          userId: currentUser.uid,
+          date: String(r[0] || ''),
+          title: String(r[1] || 'Imported Activity'),
+          provider: String(r[2] || ''),
+          tags: r[3] ? String(r[3]).split('|').map(t=>t.trim()) : [],
+          hours: +r[4] || 0,
+          reflection: String(r[5] || ''),
+          evidence: String(r[6] || '')
+        });
+        count++;
+      });
+
+      if (count === 0) {
+        alert("No valid data rows found to import. Check your spreadsheet formatting.");
+        return;
+      }
+
+      await batch.commit();
+      alert(`Success! ${count} entries imported securely to the cloud!`);
+      file.value = "";
+    } catch (err) {
+      console.error("Detailed Import Error:", err);
+      alert("Import Failed: " + err.message);
+    }
+  };
+  
+  f.name.endsWith('.csv') ? reader.readAsText(f) : reader.readAsArrayBuffer(f);
+};
+
+themeToggle.onclick = () => {
+  document.documentElement.classList.toggle('dark');
+  document.body.classList.toggle('bg-slate-900');
+  document.body.classList.toggle('text-white');
+  document.body.classList.toggle('bg-slate-100');
+  document.body.classList.toggle('text-slate-800');
+  document.querySelectorAll('.card-bg').forEach(el => {
+     el.classList.toggle('bg-white'); el.classList.toggle('bg-slate-800');
+     el.classList.toggle('text-slate-800'); el.classList.toggle('text-white');
+  });
+};
+search.oninput = () => { clearTimeout(t); t = setTimeout(render, 80); };
+</script>
+</body>
+</html>
